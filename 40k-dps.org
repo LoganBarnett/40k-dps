@@ -42,6 +42,11 @@ The program always starts with these things:
 (provide '40k-dps)
 ;;; 40k-dps.el ends here
 #+end_src
+
+** TODO include dependency metadata
+
+This requires =dash= and we should make that apparent.
+
 * test framework
 
 We should probably pull in a unit testing library, but this worked in a pinch.
@@ -58,6 +63,10 @@ We should probably pull in a unit testing library, but this worked in a pinch.
   )
 #+end_src
 * debugging
+** TODO implement debugging or pull in dependency
+
+Having log levels is important. We can leave debugging information in but not
+clutter up our message buffer unless we're specifically debugging.
 
 * org-table
 
@@ -148,3 +157,543 @@ parameter. We need to be able to get the table by its =name= property.
 ** TODO memoize =wh40k/org-table-lookup=
 
 We should consider memoizing this function at some point.
+* the big function
+
+#+begin_src emacs-lisp :results none
+(defun wh40k/damage-probability-all-weapons-to-defender (
+                                 weapon-profile-table-name
+                                 defense-profile-table-name
+                                 defender
+                                 )
+  (let* (
+         (defense-profiles (wh40k/org-table-lisp-from-name
+                            defense-profile-table-name))
+         (weapon-profiles (wh40k/org-table-lisp-from-name
+                           weapon-profile-table-name))
+         (defender-row (-find
+                        (lambda (d)
+                          (string-equal
+                           (wh40k/org-table-lookup "name" defense-profiles d)
+                           defender))
+                        defense-profiles))
+         )
+    (message "defense-profles %s" defense-profiles)
+    (message "weapon-profles %s" weapon-profiles)
+    (-map
+     (lambda (row)
+       (message "row %s" row)
+       (let*
+           (
+            (weapon-name (wh40k/org-table-lookup "name" weapon-profiles row))
+            (defender-name (wh40k/org-table-lookup "name" defense-profiles defender-row))
+            ;; Defensive traits.
+            (hit-mod (wh40k/org-table-lookup-n "hit" defense-profiles defender-row))
+            (toughness (wh40k/org-table-lookup-n "t" defense-profiles defender-row))
+            (save (wh40k/org-table-lookup-n "v" defense-profiles defender-row))
+            (invulnerable (wh40k/org-table-lookup-n "i" defense-profiles defender-row))
+            (resist-damage (wh40k/org-table-lookup-n "res" defense-profiles defender-row))
+            (feel-no-pain (wh40k/org-table-lookup-n "fnp" defense-profiles defender-row))
+            ;; Offensive traits.
+            (ballistic-skill (wh40k/org-table-lookup-n "bs" weapon-profiles row))
+            (attacks (wh40k/org-table-lookup "a" weapon-profiles row))
+            (strength (wh40k/org-table-lookup-n "s" weapon-profiles row))
+            (armor-penetration (wh40k/org-table-lookup-n "ap" weapon-profiles row))
+            (damage (wh40k/org-table-lookup "dmg" weapon-profiles row))
+            ;; Computed.
+            ;; TODO: name this better.
+            (attacks-multiplier (wh40k/damage-multiplier attacks 0))
+            (to-hit-multiplier (wh40k/d6-from-plus (- ballistic-skill hit-mod)))
+            (to-wound-multiplier (wh40k/d6-from-plus
+                                  (wh40k/strength-vs-toughness
+                                   strength
+                                   toughness)))
+            (save-multiplier
+             (wh40k/d6-from-plus-negate
+              (wh40k/ap-vs-save armor-penetration
+                                save
+                                invulnerable)
+              )
+             )
+            (damage-multiplier (wh40k/damage-multiplier damage resist-damage))
+            (feel-no-pain-multiplier (wh40k/d6-from-plus-negate feel-no-pain))
+            )
+         (message "row:
+weapon-name:             %s
+defender-name:           %s
+attacks-multiplier:      %s
+to-hit-multiplier:       %s
+to-wound-multiplier:     %s
+save-multiplier:         %s
+damage-multiplier:       %s
+feel-no-pain-multiplier: %s
+"
+                  weapon-name
+                  defender-name
+                  attacks-multiplier
+                  to-hit-multiplier
+                  to-wound-multiplier
+                  save-multiplier
+                  damage-multiplier
+                  feel-no-pain-multiplier
+                  )
+         ;; (message "processing row...")
+         ;; (message "damage %s" damage)
+         ;; (message "resist-damage %s" resist-damage)
+         ;; (message "feel-no-pain %s" feel-no-pain)
+         ;; (message "save: %s" (wh40k/ap-vs-save armor-penetration
+         ;;                                       save
+         ;;                                       invulnerable))
+         ;; (message "computed save: %s" (wh40k/d6-from-plus (wh40k/ap-vs-save armor-penetration
+         ;;                                                                    save
+         ;;                                                                    invulnerable)))
+         (list
+          weapon-name
+          defender-name
+          (*
+           attacks-multiplier
+           to-hit-multiplier
+           to-wound-multiplier
+           save-multiplier
+           damage-multiplier
+           feel-no-pain-multiplier
+           )
+          )
+         )
+       )
+     (-drop 1 weapon-profiles)
+     )
+    )
+  )
+#+end_src
+** TODO break the big function up
+
+We need some more variations too. We can start by breaking out the row handling.
+
+* dice
+
+** successes
+The =d6= is the die of the Warhammer 40,000 world. Generally a given die roll is
+described by a number we need to meet or exceed. In the vernacular it is said
+like "<number> plus", like "five plus" to roll a 5 or 6, and one through four
+are considered failures. The notation for this is "5+".
+
+We can represent these greater-than-or-equal-to rolls with a percentage.
+
+#+begin_src emacs-lisp :results none
+(defun wh40k/d6-from-plus (n)
+  (cond
+    ((> n 6) 0)
+    (t (/ (- 7 (max 2 n)) 6.0))
+  ))
+#+end_src
+
+Tests:
+#+begin_src emacs-lisp
+(list
+ (wh40k/test (/ 1.0 6.0) #'wh40k/d6-from-plus 6)
+ (wh40k/test (/ 5.0 6.0) #'wh40k/d6-from-plus 1)
+ (wh40k/test (/ 5.0 6.0) #'wh40k/d6-from-plus 2)
+ (wh40k/test 0 #'wh40k/d6-from-plus 7)
+ )
+#+end_src
+
+#+RESULTS:
+| t | t | t | t |
+
+** failing successes
+While =wh40k/d6-from-plus= works great for including successes, we can consider
+things like saving throws as a failure on the number met. So in the event of a
+3+ armor save, a roll of a three or higher will cause the damage attempt to
+fail. We need an inverted percentage for this.
+
+#+begin_src emacs-lisp :results none
+(defun wh40k/d6-from-plus-negate (n)
+  (cond
+    ((> n 6) 1.0)
+    (t (/ (max 1.0 (- n 1)) 6.0))
+  ))
+#+end_src
+
+#+begin_src emacs-lisp
+(list
+ (wh40k/test 1.0 #'wh40k/d6-from-plus-negate 7)
+ (wh40k/test (/ 5.0 6.0) #'wh40k/d6-from-plus-negate 6)
+ (wh40k/test (/ 1.0 6.0) #'wh40k/d6-from-plus-negate 2)
+ (wh40k/test (/ 3.0 6.0) #'wh40k/d6-from-plus-negate 4)
+ (wh40k/test (/ 2.0 6.0) #'wh40k/d6-from-plus-negate 3)
+ ;; We can't ever get better than +2 save.
+ (wh40k/test (/ 1.0 6.0) #'wh40k/d6-from-plus-negate 1)
+ )
+#+end_src
+
+#+RESULTS:
+| t | t | t | t | t | t |
+
+** re-rolls
+
+2*P(a) - P(a)^2
+#+begin_src emacs-lisp :results none
+(defun wh40k/d6-with-reroll (n r)
+  "Compute success chance roll of N+ on a d6, with a reroll of R or below."
+  ;; If r + 1 >= n, we reroll everything. So it's %n + %n * %n.
+  ;; If r < n, we reroll r and lower. %n + %n * %(r + n).
+  (cond
+   ;; ((>= r n) (wh40k/d6-from-plus n))
+   ((>= (+ r 1) n) (-
+                    (* 2 (wh40k/d6-from-plus n))
+                    (expt (wh40k/d6-from-plus n) 2)
+                    ))
+   (t (-
+       (* 2 (wh40k/d6-from-plus n))
+       ;; 3+ reroll 1
+       ;; 4/6 succeed plus half of 2/6 * 4/6.
+       ;; 4/6 + 4/6 * 4/6 * 0.5 = 0.88888889 <- wrong
+       ;; (4/6 * 2) - (4/6)^2 * 1/6 = 0.88888889
+       ;; 3+ reroll all
+       ;; 4/6 succeed plus all of 2/6 * 4/6.
+       ;; 4/6 + 4/6 * 4/6 * 1 = 1.11111111  <- wrong
+       ;; (4/6 * 2) - (4/6)^2 = 0.88888889
+       ;; (/
+        (* (wh40k/d6-from-plus r) (wh40k/d6-from-plus n))
+        ;; (/ r 6)
+        ;; (- 1 (/ r 6))
+        ;; )
+       )
+      )
+   )
+  )
+#+end_src
+
+Tests:
+#+begin_src emacs-lisp
+(list
+ ;; To give relative scale, 0.16666667 is 1/6.
+ (wh40k/test 0.19444444444444442 #'wh40k/d6-with-reroll 6 1)
+ ;; 6+ reroll all.
+ (wh40k/test 0.3055555555555555  #'wh40k/d6-with-reroll 6 6)
+ ;; 2+ reroll 1s.
+ (wh40k/test 0.9722222222222222  #'wh40k/d6-with-reroll 2 1)
+ ;; 2+ reroll all (same as 1s).
+ (wh40k/test 0.9722222222222222  #'wh40k/d6-with-reroll 2 6)
+ ;; 3+ reroll 1s.
+ (wh40k/test 0.7777777777777777  #'wh40k/d6-with-reroll 3 1)
+ ;; 3+ reroll all.
+ (wh40k/test 0.8888888888888888  #'wh40k/d6-with-reroll 3 6)
+ ;; Trick question. 3+ reroll 1s, 2s, and 3s. Same as all.
+ (wh40k/test 0.8888888888888888  #'wh40k/d6-with-reroll 3 3)
+ ;; 4+ reroll all.
+ (wh40k/test 0.75                #'wh40k/d6-with-reroll 4 6)
+ ;; 4+ reroll 1.
+ (wh40k/test 0.5833333333333333  #'wh40k/d6-with-reroll 4 1)
+ )
+#+end_src
+
+#+RESULTS:
+| t | t | t | t | t | t | t | t | t |
+** to-wound
+
+To wound rolls are comparative. The strength of the attack is compared to the
+toughness of the defender. The Warhammer 40,000 rules are fairly simple here:
+
++ If the strength is double or greater the toughness, use a 2+.
++ If the strength is greater than the toughness, but not greater than or equal
+  to double the toughness (in other words, not the prior condition), use a 3+.
++ If the strength is equal to the toughness, use a 4+.
++ If the strength is less than the toughness, but not less than or equal to half
+  the toughness, use a 5+.
++ If the strength is less than or equal to half the toughness, use a 6+.
+
+#+begin_src emacs-lisp :results none
+(defun wh40k/strength-vs-toughness (s toughness)
+  (cond
+      ((>= s (* toughness 2)) 2)
+      ((<= (* s 2) toughness) 6)
+      ((> s toughness) 3)
+      ((< s toughness) 5)
+      (t 4)
+      )
+  )
+#+end_src
+
+Test it:
+#+begin_src emacs-lisp
+(list
+ (wh40k/test 2 #'wh40k/strength-vs-toughness 6 1)
+ (wh40k/test 6 #'wh40k/strength-vs-toughness 1 6)
+ (wh40k/test 4 #'wh40k/strength-vs-toughness 3 3)
+ (wh40k/test 5 #'wh40k/strength-vs-toughness 3 4)
+ (wh40k/test 3 #'wh40k/strength-vs-toughness 4 3)
+ (wh40k/test 6 #'wh40k/strength-vs-toughness 3 6)
+ (wh40k/test 2 #'wh40k/strength-vs-toughness 6 3)
+ (wh40k/test 3 #'wh40k/strength-vs-toughness 5 3)
+ (wh40k/test 5 #'wh40k/strength-vs-toughness 3 5)
+)
+#+end_src
+
+#+RESULTS:
+| t | t | t | t | t | t | t | t | t |
+
+** saving throws
+
+Sometimes also just called a "save". Saves include armor saves and invulnerable
+saves. Almost every model has an armor save, but a relatively small number
+_include_ an invulnerable save. There was a time where some models didn't have
+any armor save and only had an invulnerable save. We should support that case as
+well.
+
+Armor saves are reduced in effectiveness by the armor penetration value. So a 4+
+armor save against an AP -1 weapon effectively means the defender needs to make
+a 5+ save instead. If an invulnerable save is present, always use the better
+save after applying the armor penetration. Remember: Invulnerable saves are
+unaffected by AP.
+
+#+begin_src emacs-lisp :results none
+;; Apply armor penetration to the save. If the save is worse than the
+;; invulnerable, use the invulnerable. Returns a percentage reduced by saves.
+(defun wh40k/ap-vs-save (ap save invulnerable)
+  (min
+   7
+   (cond
+    ((> (- save ap) invulnerable) invulnerable)
+    (t (- save ap))
+    )
+   )
+  )
+#+end_src
+
+Tests:
+#+begin_src emacs-lisp
+(list
+  ;; Use armor save when AP is 0 and invulnerable is worse.
+  (wh40k/test 3 #'wh40k/ap-vs-save 0 3 4)
+  ;; Use invulnerable or armor save when AP makes armor save and invulnerable
+  ;; the same.
+  (wh40k/test 4 #'wh40k/ap-vs-save -1 3 4)
+  ;; Use invulnerable when invulnerable is worse than armor save from AP.
+  (wh40k/test 4 #'wh40k/ap-vs-save -2 3 4)
+  ;; Use invulnerable when AP makes armor save worse than invulnerable.
+  (wh40k/test 4 #'wh40k/ap-vs-save -2 3 4)
+  ;; Use worse save if AP doesn't make armor save worse than invulnerable.
+  (wh40k/test 5 #'wh40k/ap-vs-save -2 3 6)
+  ;; Never go worse than 7 even if AP would make it worse than 7.
+  ;; This is because 7 is our special "no save" number.
+  (wh40k/test 7 #'wh40k/ap-vs-save -4 6 8)
+  )
+#+end_src
+
+#+RESULTS:
+| t | t | t | t | t | t |
+** Damage
+
+Damage can be thought of as a multiplier - albeit a variable one. A damage value
+of 3 will always multiply the damage by 3. This is a bit oversimplified as
+damage is a complex topic. For example, if a unit whose models are 3 wounds each
+takes damage values of 1, 2, and 3, the defender can allocate the wounds in the
+order of 2, 3, and then 1. This means one model is destroyed and the next one
+takes 1 wound. These kinds of strategies make multi-wound models deceptively
+resilient, and very difficult to come up with a good, quantifiable average from
+a given salvo. This doesn't mean we should ignore the value that high-damage
+weapons afford - just that we should accept that the number is probably lower
+than it really is. A good computational model will include the wounds value of
+the defender, and maybe we can work out a kind of "average shenanigans" in which
+multi-model wounds are represented as more than just some extra number of wounds
+to take down. It could be reasoned that for damage values that _could_ be lower
+than the total wounds of a multi-wound model are simply lowered - there's some
+average number of wounds a clever defender can shrug off due to the lack of
+carry-over to the next model.
+
+None of this applies to mortal wounds, but we should treat mortal wounds with a
+different computation altogether since there is no "to-wound" chance - it's just
+damage applied with only feel-no-pains as a possible reduction.
+
+*** Getting variable damage
+
+Damage can be a value like =1= or =2= but it can also be =d3= or =d6=. Get us
+the variable number. Use =0= if no variable number is present.
+
+#+begin_src emacs-lisp :results none
+(defun wh40k/damage-die (damage-notation)
+  (string-to-number
+   (save-match-data
+     (if (string-match "d\\([\\[:digit:]]\\)" damage-notation)
+         (match-string 1 damage-notation)
+       "0"
+       )
+     )
+   )
+  )
+#+end_src
+
+#+begin_src emacs-lisp
+(list
+  (wh40k/test 0 #'wh40k/damage-die "3")
+  (wh40k/test 0 #'wh40k/damage-die "4")
+  (wh40k/test 3 #'wh40k/damage-die "d3")
+  (wh40k/test 3 #'wh40k/damage-die "d3+3")
+  (wh40k/test 6 #'wh40k/damage-die "d6+3")
+  )
+#+end_src
+
+#+RESULTS:
+| t | t | t | t | t |
+
+**** TODO Handle variable number of dice
+
+Such as =2d3= or =2d6=.
+
+*** Get both constant and variable damage
+
+#+begin_src emacs-lisp :results none
+(defun wh40k/damage-parse (damage)
+  (let* (
+         ;; Make the notation uniform. "D3 + 3" becomes "d3+3", etc.
+         (dmg-clean (replace-regexp-in-string
+                     " "
+                     ""
+                     (downcase damage)))
+         (variable (wh40k/damage-die dmg-clean))
+         (die-text (concat "d" (number-to-string variable)))
+         (dmg-sans-die
+          ;; We cannot do negative lookbehinds in Emacs Lisp, so we must instead
+          ;; extract the die. Fortunately we just got it, so it's a replace
+          ;; away.
+          (replace-regexp-in-string
+           (regexp-quote die-text)
+           ""
+           dmg-clean
+           )
+          )
+         (constant (save-match-data
+                     (if (string-match
+                          "\\([\\[:digit:]]+\\)"
+                          dmg-sans-die
+                          )
+                         (match-string 1 dmg-sans-die)
+                       "0"
+                       )
+                     ))
+         )
+    (list
+     (cond
+      ((= variable 3) (/ 3.0 2.0))
+      ((= variable 6) (/ 6.0 2.0))
+      (t 0.0)
+      )
+     (string-to-number constant)
+     )
+    )
+  )
+#+end_src
+
+#+begin_src emacs-lisp
+(list
+  (wh40k/test '(0.0 3) #'wh40k/damage-parse "3")
+  (wh40k/test '(0.0 4) #'wh40k/damage-parse "4")
+  (wh40k/test '(1.5 0) #'wh40k/damage-parse "d3")
+  (wh40k/test '(1.5 3) #'wh40k/damage-parse "d3+3")
+  (wh40k/test '(3.0 3) #'wh40k/damage-parse "d6+3")
+  )
+#+end_src
+
+#+RESULTS:
+| t | t | t | t | t |
+
+*** Damage Resistance
+
+When the damage is something like =d6= the average result reflects that there is
+a one in six chance - easy stuff. However when we apply the damage resistance
+for things like "Disgustingly Resilient" or the Wave Serpent's Serpent Shield,
+we get a reduction of 1 damage, down to a minimum of 1. This means our =d6=
+becomes something like =(min (- d6 1) 1)=. As far as probability space goes,
+this means that there's a two in six chance of rolling a 1, and a 4 in 6 chance
+of rolling some other number. The probability works out such that we can say 2/6
+is 1, and 4/6 is the average of 2 through 5, or 1.5+1 or 2.5.
+
+2/6 = 1
+4/6 = 2.5
+
+Then we do some weighting. An average of an average... is that okay?
+
+(1 + 1 + 2.5 * 4) / 6 = 2
+
+Wow, this effect is powerful. However it only applies to weapons who have a
+damage of more than (or possibly more than) 1.
+
+With a =d3=, the results should be similar.
+2/6 = 1
+4/6 = 1.5
+(1 + 1 + 1.5 * 4) / 6 = 1 1/3
+
+The total formula looks like this:
+
+(2 + ((d + 2) / 2 - 1)) / 6 = x
+
+#+begin_src emacs-lisp :results none
+;; This only works with a resistance of 1. Need to refine formula for more when
+;; the need arises.
+(defun wh40k/damage-resist-from-die (die)
+  (/ (+ 2.0 (* 4.0 (- (/ (+ 2.0 die) 2.0) 1.0))) 6.0)
+  )
+#+end_src
+
+#+begin_src emacs-lisp
+(list
+  (wh40k/test (+ 1.0 (/ 1.0 3.0)) #'wh40k/damage-resist-from-die 3)
+  (wh40k/test (+ 2.0 (/ 1.0 3.0)) #'wh40k/damage-resist-from-die 6)
+  )
+#+end_src
+
+#+RESULTS:
+| t | t |
+
+
+This gets us the total damage percentage/multiplier:
+
+#+begin_src emacs-lisp :results none
+(defun wh40k/damage-multiplier (damage-notation resist)
+  (let* (
+         (damage-pair (wh40k/damage-parse damage-notation))
+         ;; Keep in mind this is not the die itself, but the variable average
+         ;; from the die.
+         (variable (car damage-pair))
+         (constant (car (cdr damage-pair)))
+         )
+    (message "constant %s" constant)
+    (message "variable %s" variable)
+    (cond
+     ;; Nothing to do here if we resist nothing.
+     ((= resist 0) (+ constant variable))
+     ;; Do not deduct damage if it is just 1.
+     ((and (= constant 1) (= variable 0.0)) 1.0)
+     ;; If the constant is > 1, we can safely deduct 1 always.
+     ((> constant 1) (+ variable (- constant 1)))
+     ;; If we just have a die, we have to do some computation.
+     ((> variable 0.0) (wh40k/damage-resist-from-die
+                        (wh40k/damage-die damage-notation)))
+     ;; That _should_ be all the cases.
+     (t nil)
+      )
+    )
+  )
+#+end_src
+
+#+begin_src emacs-lisp
+(list
+  (wh40k/test 1.5 #'wh40k/damage-multiplier "d3" 0)
+  (wh40k/test (+ 1.0 (/ 1.0 3.0)) #'wh40k/damage-multiplier "d3" 1)
+  (wh40k/test (+ 2.0 (/ 1.0 3.0)) #'wh40k/damage-multiplier "d6" 1)
+  (wh40k/test 6.0 #'wh40k/damage-multiplier "d6+3" 0)
+  (wh40k/test 5.0 #'wh40k/damage-multiplier "d6+3" 1)
+  (wh40k/test 6.0 #'wh40k/damage-multiplier "6" 0)
+  (wh40k/test 12.0 #'wh40k/damage-multiplier "12" 0)
+  ;; TODO: Handle 2d6.
+  )
+#+end_src
+
+#+RESULTS:
+| t | t | t | t | t | t | t |
+
+
+
+* COMMENT Settings
+#  LocalWords:  AP
