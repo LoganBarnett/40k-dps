@@ -1,0 +1,118 @@
+#+title:     40k DPS
+#+author:    Logan Barnett-Hoy
+#+email:     logustus@gmail.com
+#+date:      <2021-06-26 Sat>
+#+language:  en
+#+file_tags:
+#+tags:
+
+Calculate the DPS (Damage Per Salvo) averages of a weapon to a given defense
+profile in the grimdark table top war game Warhammer 40,000 by Games Workshop.
+
+Data won't be provided here. Maybe at some point we can import data from the
+same source that BattleScribe uses. For now, you have to do your own data entry
+using data sources you legally purchased.
+
+
+* Installation
+
+Clone this repository.
+
+* Requirements
+
+Emacs, =org-babel=, your favorite codex, and the codex of your nemesis.
+
+* Usage
+
+** Profile Tables
+You need a table with an attack profile and a separate table with a defense
+profile.
+
+The attack profile table is a table with the following fields:
++ =name= :: The name of the profile. Could be the weapon name, but might also
+  include the yielder. This is for human identification and is arbitrary. A name
+  could be "Shuriken Pistol" but it could also be "Farseer Shuriken Pistol",
+  because Farseers use a different ballistic skill. You will need this name to
+  select the row for computation.
++ =bs= :: The ballistic skill of the attacker.
++ =a= :: The number of attacks (for fights) or shots (for shooting) this attack
+  profile has.
++ =s= :: The strength of the attack. Must be a number. Cannot be "2x" like it is
+  seen in some printed profiles. You must resolve the final strength.
++ =ap= :: The armor (armour) penetration value of the attack.
++ =dmg= :: The damage of the attack. You can use dice notation here. So it can
+  be =2=, =d6=, =d3=, =d3+3=, etc. Does not yet support =2d6=.
++ =special= :: Not yet used. This is reserved for special behaviors of weapons,
+  such as shuriken weapons that switch to AP -3 on a wound roll of 6, or one of
+  the =2d6= damage but only take the highest result. Ideally this will be terse
+  yet readable labels.
+
+The attack table itself needs a =name= which you can use to pick it for
+computation.
+
+The order of the columns isn't important, though examples will follow a
+consistent format that loosely follows the order of calculations and/or the
+profiles listed in the codeces.
+
+Example:
+#+begin_example org
+Hey look I made Craftworld Eldar weaponry useful!
+
+,#+name: aeldari-fixed-weapon-profiles
+,| name              | bs | a | s | ap | dmg | special |
+,|-------------------+----+---+---+----+-----+---------|
+,| Shuriken catapult |  3 | 4 | 4 |  0 |   1 |         |
+#+end_example
+
+The defense profile is a table using the following columns:
++ =name= :: Name of the defender. It could represent a specific model or even a
+  specific model under specific circumstances. It could be something like
+  "Plagueburst Crawler" but might also be "Axe Wraithblades with Fortune". Use
+  an identifier that is helpful to you.
++ =hit= :: This is any to-hit modifiers imposed by the defender. This might be
+  due to cover or some other indicator that would reduce the roll value to hit.
+  This is not a ballistic skill modifier, which would normally be indicated on
+  the attacker profile. Most entries will have this at 0.
++ =t= :: The toughness of the defender.
++ =v= :: The normal armor save of the defender. Use 7 if there is no armor save.
++ =i= :: The invulnerable save of the defender. Use 7 if there is no
+  invulnerable save.
++ =res= :: The damage resistance. Not given a name under normal circumstances:
+  The damage resistance is typically stated like "reduce the damage by one to a
+  minimum of one".
++ =fnp= :: "Feel No Pain". Not a formal rule in 9th edition - it comes up
+  frequently enough though and is more or less exactly the rule as it was in
+  prior editions. This is the ability to shrug off damage (after it is unsaved
+  and the damage value is computed). Use 7 for no Feel No Pain.
++ =special= :: Reserved for special defender properties. Not supported yet. This
+  will be a terse but human friendly set of names. An example of a special rule
+  that could be supported is the Eldritch Wraith Construct rule, which reduces
+  AP -1 values to AP 0.
++ =pts= :: Points value. Not used yet.
++ =army= :: The army this belongs to. One example is "Death Guard". This is a
+  human friendly display name. The defense table could include hypothetically
+  every defense profile and so there is utility on filtering or sorting by army.
+
+You might notice there is no =wounds= value anywhere. This is because it is not
+yet relevant for computation.
+
+The defense table itself needs a =name= which you can use to pick it for
+computation.
+
+#+begin_example org
+,Nobody kills a Deathshroud Terminator. Nobody.
+,#+name: dream-deathshroud-terminiator-defense-profiles
+,| name                   | hit | t | v | i | res | fnp | special | pts | army        |
+,|------------------------+-----+---+---+---+-----+-----+---------+-----+-------------|
+,| Deathshroud Terminator |   0 | 6 | 2 | 4 |   1 |   5 |         |     | Death Guard |
+,| Deathshroud Champion   |   0 | 8 | 2 | 3 |   1 |   5 |         |     | Death Guard |
+#+end_example
+** src
+
+#+begin_src emacs-lisp
+(require "40k-dps")
+(append
+  (wh40k/damage-probability "Deathshroud Terminator")
+  (wh40k/damage-probability "Deathshroud Champion")
+  )
+#+end_src

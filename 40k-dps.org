@@ -1,0 +1,150 @@
+#+title:     40K DPS
+#+author:    Logan Barnett-Hoy
+#+email:     logustus@gmail.com
+#+date:      <2021-06-26 Sat>
+#+language:  en
+#+file_tags:
+#+tags:
+
+* literate program
+
+This is a literate program. Changes to the program should be made in this file
+and then the final =.el= file created using =org-babel=. See [[entry point]] for the
+entry point to the program.
+
+* entry point
+
+The program always starts with these things:
+
+#+begin_src emacs-lisp :noweb yes :tangle t
+;;; 40k-dps.el --- Calculate 40k attack/defense averages -*- lexical-binding: t; -*-
+;;
+;; Copyright (C) 2021 Logan Barnett-Hoy
+;;
+;; Author: Logan Barnett-Hoy <https://github.com/logan>
+;; Maintainer: Logan Barnett-Hoy <logustus@gmail.com>
+;; Created: June 26, 2021
+;; Modified: June 26, 2021
+;; Version: 0.0.1
+;; Keywords: Symbol’s value as variable is void: finder-known-keywords
+;; Homepage: https://github.com/logan/40k-dps
+;; Package-Requires: ((emacs "24.3"))
+;;
+;; This file is not part of GNU Emacs.
+;;
+;;; Commentary:
+;;
+;; Computes average damage from a given salvo of weapons fire or attacks in the
+;; grimdark game of Warhammer 40,000 by Games Workshop.
+;;
+;;; Code:
+
+(provide '40k-dps)
+;;; 40k-dps.el ends here
+#+end_src
+* test framework
+
+We should probably pull in a unit testing library, but this worked in a pinch.
+
+#+name: wh40k/test
+#+begin_src emacs-lisp :results none
+(defun wh40k/test (expected fn &rest args)
+  (let ((result (apply fn args)))
+    (cond
+     ((string-equal (format "%s" expected) (format "%s" result)) t)
+     (t `(,expected . ,result))
+     )
+    )
+  )
+#+end_src
+* debugging
+
+* org-table
+
+=org-mode='s table support is very helpful, but we have some common actions that
+it doesn't immediately provide.
+
+** Look up a field using a column name
+We expect tables to come with a table header, and the table headers are
+documented (currently in just [[README.org]]). We need a handy method of looking up
+the field using a column name.
+
+
+#+begin_src emacs-lisp :results none
+(defun wh40k/org-table-lookup (column-name table row)
+  "Get field value from ROW using COLUMN-NAME found in TABLE."
+  (let (
+        (header-index
+         (-elem-index
+          column-name
+          (car table)
+          ))
+        )
+    (message "index at %s" header-index )
+    (message "row %s" row)
+    (message "output at %s: %s" header-index (nth header-index row))
+    (nth header-index row)
+    )
+  )
+#+end_src
+
+We frequently convert the value to a =number= so let's make a convenience
+function for getting the value and doing the conversion.
+
+#+begin_src emacs-lisp :results none
+(defun wh40k/org-table-lookup-n (&rest args)
+  (string-to-number (apply #'wh40k/org-table-lookup args))
+  )
+#+end_src
+
+** Get a table and convert it to a 2D Lisp list
+
+Using =org-table-to-lisp= we can get a table at =point= or from the =TXT=
+parameter. We need to be able to get the table by its =name= property.
+
+#+begin_src emacs-lisp :results none
+;; We have some special rows:
+;; Row 2: header row - I need this.
+;; Row 3: hline - drop it.
+(defun wh40k/org-table-keep-row (row)
+  (cond
+   ((equal 'hline row) nil)
+   (t t)
+   )
+  )
+
+(defun wh40k/org-table-lisp-from-name (tblname)
+  (save-excursion
+    (let* (
+           (table
+            (org-element-map (org-element-parse-buffer) 'table
+              (lambda (element)
+                (when (string= tblname (org-element-property :name element))
+                  element))
+              nil ;info
+              t )) ; first-match
+           )
+      (goto-char (org-element-property :contents-begin table))
+      (-filter #'wh40k/org-table-keep-row (org-table-to-lisp))
+      )
+    )
+  )
+#+end_src
+
+#+name: test-table-to-lisp
+| name | value |
+|------+-------|
+| foo  | bar   |
+
+#+begin_src emacs-lisp
+(wh40k/org-table-lisp-from-name "test-table-to-lisp")
+#+end_src
+
+#+RESULTS:
+| name | value |
+| foo  | bar   |
+
+
+** TODO memoize =wh40k/org-table-lookup=
+
+We should consider memoizing this function at some point.
