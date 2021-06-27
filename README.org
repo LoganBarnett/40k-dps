@@ -137,7 +137,6 @@ units. Data tables are not included.
   )
 #+end_src
 
-#+RESULTS:
 | AML starshot                  | Pox walker             |    1.388888888888889 |
 | AML sunburst                  | Pox walker             |   0.8333333333333334 |
 | AML sunburst (full blast)     | Pox walker             |   1.6666666666666667 |
