@@ -13,10 +13,15 @@ Data won't be provided here. Maybe at some point we can import data from the
 same source that BattleScribe uses. For now, you have to do your own data entry
 using data sources you legally purchased.
 
+* Here be dragons
+
+I haven't connected all of the functions up yet. I had it working deep in my
+notes file, but I wanted to both document and open source this work. I should
+have it fully functional soon.
 
 * Installation
 
-Clone this repository.
+Clone this repository. It's not published yet :(
 
 * Requirements
 
@@ -107,12 +112,134 @@ computation.
 ,| Deathshroud Terminator |   0 | 6 | 2 | 4 |   1 |   5 |         |     | Death Guard |
 ,| Deathshroud Champion   |   0 | 8 | 2 | 3 |   1 |   5 |         |     | Death Guard |
 #+end_example
-** src
+** Usage
+
+*** Running the computation
+
+Here's an example using some Craftworld Aeldari weaponry against some Deathguard
+units. Data tables are not included.
 
 #+begin_src emacs-lisp
 (require "40k-dps")
 (append
-  (wh40k/damage-probability "Deathshroud Terminator")
-  (wh40k/damage-probability "Deathshroud Champion")
+  (wh40k/damage-probability-all-weapons-to-defender
+                           "aeldari-weapon-profiles"
+                           "defense-profiles"
+                           "Pox walker")
+  (wh40k/damage-probability-all-weapons-to-defender
+                           "aeldari-weapon-profiles"
+                           "defense-profiles"
+                           "Deathshroud Terminator")
+  (wh40k/damage-probability-all-weapons-to-defender
+                           "aeldari-weapon-profiles"
+                           "defense-profiles"
+                           "Plagueburst Crawler")
   )
 #+end_src
+
+#+RESULTS:
+| AML starshot                  | Pox walker             |    1.388888888888889 |
+| AML sunburst                  | Pox walker             |   0.8333333333333334 |
+| AML sunburst (full blast)     | Pox walker             |   1.6666666666666667 |
+| Shuriken Pistol               | Pox walker             |   0.2777777777777778 |
+| Shuriken Catapult             | Pox walker             |   0.5555555555555556 |
+| Twin Linked Shuriken Catapult | Pox walker             |   1.1111111111111112 |
+| Scatter Laser                 | Pox walker             |   1.4814814814814814 |
+| Twin Linked Scatter Laser     | Pox walker             |    2.962962962962963 |
+| Shuriken Cannon               | Pox walker             |   1.1111111111111112 |
+| Twin Linked Shuriken Cannon   | Pox walker             |   2.2222222222222223 |
+| Ghostspear                    | Pox walker             |    8.333333333333334 |
+| Ghostglaive                   | Pox walker             |    5.555555555555556 |
+| Wraithbone Fists              | Pox walker             |    4.444444444444445 |
+| Titanic Wraithbone Feet       | Pox walker             |    8.333333333333334 |
+| Titanic Wraithbone Fists      | Pox walker             |    5.555555555555556 |
+| Titanic Ghostglaive           | Pox walker             |   11.111111111111112 |
+| AML starshot                  | Deathshroud Terminator |   0.5185185185185185 |
+| AML sunburst                  | Deathshroud Terminator |   0.2222222222222222 |
+| AML sunburst (full blast)     | Deathshroud Terminator |   0.4444444444444444 |
+| Shuriken Pistol               | Deathshroud Terminator | 0.037037037037037035 |
+| Shuriken Catapult             | Deathshroud Terminator |  0.07407407407407407 |
+| Twin Linked Shuriken Catapult | Deathshroud Terminator |  0.14814814814814814 |
+| Scatter Laser                 | Deathshroud Terminator |   0.2962962962962963 |
+| Twin Linked Scatter Laser     | Deathshroud Terminator |   0.5925925925925926 |
+| Shuriken Cannon               | Deathshroud Terminator |   0.2222222222222222 |
+| Twin Linked Shuriken Cannon   | Deathshroud Terminator |   0.4444444444444444 |
+| Ghostspear                    | Deathshroud Terminator |   3.8888888888888893 |
+| Ghostglaive                   | Deathshroud Terminator |    2.074074074074074 |
+| Wraithbone Fists              | Deathshroud Terminator |   1.7777777777777777 |
+| Titanic Wraithbone Feet       | Deathshroud Terminator |   3.5555555555555554 |
+| Titanic Wraithbone Fists      | Deathshroud Terminator |    2.074074074074074 |
+| Titanic Ghostglaive           | Deathshroud Terminator |    5.555555555555555 |
+| AML starshot                  | Plagueburst Crawler    |   0.5185185185185185 |
+| AML sunburst                  | Plagueburst Crawler    |  0.16666666666666666 |
+| AML sunburst (full blast)     | Plagueburst Crawler    |   0.3333333333333333 |
+| Shuriken Pistol               | Plagueburst Crawler    | 0.037037037037037035 |
+| Shuriken Catapult             | Plagueburst Crawler    |  0.07407407407407407 |
+| Twin Linked Shuriken Catapult | Plagueburst Crawler    |  0.14814814814814814 |
+| Scatter Laser                 | Plagueburst Crawler    |   0.2962962962962963 |
+| Twin Linked Scatter Laser     | Plagueburst Crawler    |   0.5925925925925926 |
+| Shuriken Cannon               | Plagueburst Crawler    |   0.2222222222222222 |
+| Twin Linked Shuriken Cannon   | Plagueburst Crawler    |   0.4444444444444444 |
+| Ghostspear                    | Plagueburst Crawler    |    4.148148148148148 |
+| Ghostglaive                   | Plagueburst Crawler    |    2.765432098765432 |
+| Wraithbone Fists              | Plagueburst Crawler    |   1.1851851851851851 |
+| Titanic Wraithbone Feet       | Plagueburst Crawler    |   3.5555555555555554 |
+| Titanic Wraithbone Fists      | Plagueburst Crawler    |    2.074074074074074 |
+| Titanic Ghostglaive           | Plagueburst Crawler    |   7.4074074074074066 |
+
+*** Interpreting the results
+
+**** Analysis: Shooting Pox Walkers
+Taking the results above:
+
+| AML sunburst              | Pox walker | 0.8333333333333334 |
+| AML sunburst (full blast) | Pox walker | 1.6666666666666667 |
+| Shuriken Catapult         | Pox walker | 0.5555555555555556 |
+| Scatter Laser             | Pox walker | 1.4814814814814814 |
+
+This means firing an AML starshot missile at a Pox Walker will shave off more
+than than half a wound. In the game all damage is done in whole numbers, so this
+more-than-half wound is meaningless by itself. It's important to understand that
+this is an average, and averages only see consistency in high sample sizes. Or
+at least the probability of the average reflecting the reality approaches 1
+(100%) as the sample size (number of attempts) approaches infinity.
+
+We aren't doing infinite rolls, but we are usually firing more than one thing,
+possibly more than one time. The number starts to get more useful when outcomes
+are considered. In other words, instead of expecting a single missile to remove
+half a wound from a pox walker, consider that a unit of 20 pox walkers could be
+killed by about 24 missile shots (20 / 0.83). Even fewer if you use the new
+blast rules! With a group of 20, we get a full 6 shots, so that's 20 / 1.667 =
+12 (even) salvos needed.
+
+That number could vary quite a bit, but it should give you an idea of the action
+investment you want to make. In a 5 turn game, dedicating a single missile
+launcher to them wouldn't achieve the result of blasting them off an objective,
+let alone doing so in a timely manner. However a full War Walker squadron (three
+units) that packs two AMLs each means you could have them dead or close to dead
+in two rounds, and almost certainly all of them in 3. Even in that case, they
+are still scoring for at least two turns. By the Emperor, Deathguard are tough!
+
+Scatter Lasers are interestingly a close second. Shuriken Catapults are about a
+third of the effectiveness, but might be easier to shore up in numbers. It takes
+~12 AML shots to bring them down (6 War Walkers), or 36 Guardian Defenders. The
+Defenders are roughly 2x cheaper in points, but the 12" vs 48" range difference
+might make it worth the points investment.
+
+**** This is Imperfect
+Remember all of this is an approximation. In our Pox Walker blast example, the
+blast rule would have diminishing returns as the number of models went down. The
+current system does not account for this, and is an exercise left to the
+consumer.
+
+The program does also not handle clever wound allocation. For example, a
+Deathshroud Terminator has three wounds. If a unit of 3 is attacked and the
+attacker produces 1, 2, and 3 damage, the defender could allocate 2 and then 3
+on the first model, and 1 on the next model. So one model is lost, even though
+enough damage was generated to destroy two models (six total damage). At the
+moment, =40k-dps= doesn't even know about the Wounds characteristic, so it can't
+handle this yet. However it would be great to get to one day.
+
+*** TODO Use an example with legally acceptable data
+
+Make something up, like Squats against... other Squats?
