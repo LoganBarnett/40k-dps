@@ -102,6 +102,7 @@ function for getting the value and doing the conversion.
 
 #+begin_src emacs-lisp :results none
 (defun wh40k/org-table-lookup-n (&rest args)
+  "Get numberic table value using `wh40k/org-table-lookup' ARGS."
   (string-to-number (apply #'wh40k/org-table-lookup args))
   )
 #+end_src
@@ -116,6 +117,7 @@ parameter. We need to be able to get the table by its =name= property.
 ;; Row 2: header row - I need this.
 ;; Row 3: hline - drop it.
 (defun wh40k/org-table-keep-row (row)
+  "Indicate if ROW is not an hline."
   (cond
    ((equal 'hline row) nil)
    (t t)
@@ -123,6 +125,7 @@ parameter. We need to be able to get the table by its =name= property.
   )
 
 (defun wh40k/org-table-lisp-from-name (tblname)
+  "Find an org-table named TBLNAME in the current buffer."
   (save-excursion
     (let* (
            (table
@@ -165,6 +168,7 @@ We should consider memoizing this function at some point.
                                  defense-profile-table-name
                                  defender
                                  )
+  "Calculate damage statistics WEAPON-PROFILE-TABLE-NAME against DEFENDER using DEFENSE-PROFILE-TABLE-NAME."
   (let* (
          (defense-profiles (wh40k/org-table-lisp-from-name
                             defense-profile-table-name))
@@ -265,6 +269,7 @@ feel-no-pain-multiplier: %s
     )
   )
 #+end_src
+
 ** TODO break the big function up
 
 We need some more variations too. We can start by breaking out the row handling.
@@ -281,6 +286,7 @@ We can represent these greater-than-or-equal-to rolls with a percentage.
 
 #+begin_src emacs-lisp :results none
 (defun wh40k/d6-from-plus (n)
+  "Calculates the percentage probability of a d6 roll of N or greater."
   (cond
     ((> n 6) 0)
     (t (/ (- 7 (max 2 n)) 6.0))
@@ -308,6 +314,7 @@ fail. We need an inverted percentage for this.
 
 #+begin_src emacs-lisp :results none
 (defun wh40k/d6-from-plus-negate (n)
+  "Calculates the percentage chances of rolling N or lower on a d6."
   (cond
     ((> n 6) 1.0)
     (t (/ (max 1.0 (- n 1)) 6.0))
@@ -404,12 +411,13 @@ toughness of the defender. The Warhammer 40,000 rules are fairly simple here:
 + If the strength is less than or equal to half the toughness, use a 6+.
 
 #+begin_src emacs-lisp :results none
-(defun wh40k/strength-vs-toughness (s toughness)
+(defun wh40k/strength-vs-toughness (strength toughness)
+  "The d6 roll to wound with STRENGTH against TOUGHNESS."
   (cond
-      ((>= s (* toughness 2)) 2)
-      ((<= (* s 2) toughness) 6)
-      ((> s toughness) 3)
-      ((< s toughness) 5)
+      ((>= strength (* toughness 2)) 2)
+      ((<= (* strength 2) toughness) 6)
+      ((> strength toughness) 3)
+      ((< strength toughness) 5)
       (t 4)
       )
   )
@@ -451,6 +459,10 @@ unaffected by AP.
 ;; Apply armor penetration to the save. If the save is worse than the
 ;; invulnerable, use the invulnerable. Returns a percentage reduced by saves.
 (defun wh40k/ap-vs-save (ap save invulnerable)
+  "The d6 roll needed to ignore wound using SAVE or INVULNERABLE based on AP.
+
+If no save or invulnerable, use 7 or higher. AP should be a negative value
+generally, but could be positive to reflect cover or other factors."
   (min
    7
    (cond
@@ -513,6 +525,7 @@ the variable number. Use =0= if no variable number is present.
 
 #+begin_src emacs-lisp :results none
 (defun wh40k/damage-die (damage-notation)
+  "The rolled segment of DAMAGE-NOTATION."
   (string-to-number
    (save-match-data
      (if (string-match "d\\([\\[:digit:]]\\)" damage-notation)
@@ -545,6 +558,13 @@ Such as =2d3= or =2d6=.
 
 #+begin_src emacs-lisp :results none
 (defun wh40k/damage-parse (damage)
+  "Parse a DAMAGE notation into a tuple of random and constant values.
+
+Examples:
+(wh40k/damage-parse \"d3\")   ; '(3 0)
+(wh40k/damage-parse \"d3+3\") ; '(3 3)
+(wh40k/damage-parse \"2\")    ; '(0 2)
+"
   (let* (
          ;; Make the notation uniform. "D3 + 3" becomes "d3+3", etc.
          (dmg-clean (replace-regexp-in-string
@@ -632,6 +652,7 @@ The total formula looks like this:
 ;; This only works with a resistance of 1. Need to refine formula for more when
 ;; the need arises.
 (defun wh40k/damage-resist-from-die (die)
+  "Average the reduction of DIE damage amount by 1, to a minimum of one."
   (/ (+ 2.0 (* 4.0 (- (/ (+ 2.0 die) 2.0) 1.0))) 6.0)
   )
 #+end_src
