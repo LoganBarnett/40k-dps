@@ -16,7 +16,7 @@ entry point to the program.
 
 The program always starts with these things:
 
-#+begin_src emacs-lisp :noweb yes :tangle t
+#+begin_src emacs-lisp :noweb yes :tangle 40k-dps.el :results none
 ;;; 40k-dps.el --- Calculate 40k attack/defense averages -*- lexical-binding: t; -*-
 ;;
 ;; Copyright (C) 2021 Logan Barnett-Hoy
@@ -39,6 +39,20 @@ The program always starts with these things:
 ;;
 ;;; Code:
 
+<<wh40k/org-table-lookup>>
+<<wh40k/org-table-lookup-n>>
+<<wh40k/org-table-keep-row>>
+<<wh40k/org-table-lisp-from-name>>
+<<wh40k/d6-from-plus>>
+<<wh40k/d6-from-plus-negate>>
+<<wh40k/d6-with-reroll>>
+<<wh40k/strength-vs-toughness>>
+<<wh40k/ap-vs-save>>
+<<wh40k/damage-die>>
+<<wh40k/damage-parse>>
+<<wh40k/damage-resist-from-die>>
+<<wh40k/damage-multiplier>>
+<<wh40k/damage-probability-all-weapons-to-defender>>
 (provide '40k-dps)
 ;;; 40k-dps.el ends here
 #+end_src
@@ -78,7 +92,7 @@ We expect tables to come with a table header, and the table headers are
 documented (currently in just [[README.org]]). We need a handy method of looking up
 the field using a column name.
 
-
+#+name: wh40k/org-table-lookup
 #+begin_src emacs-lisp :results none
 (defun wh40k/org-table-lookup (column-name table row)
   "Get field value from ROW using COLUMN-NAME found in TABLE."
@@ -100,6 +114,7 @@ the field using a column name.
 We frequently convert the value to a =number= so let's make a convenience
 function for getting the value and doing the conversion.
 
+#+name: wh40k/org-table-lookup-n
 #+begin_src emacs-lisp :results none
 (defun wh40k/org-table-lookup-n (&rest args)
   "Get numberic table value using `wh40k/org-table-lookup' ARGS."
@@ -112,6 +127,7 @@ function for getting the value and doing the conversion.
 Using =org-table-to-lisp= we can get a table at =point= or from the =TXT=
 parameter. We need to be able to get the table by its =name= property.
 
+#+name: wh40k/org-table-keep-row
 #+begin_src emacs-lisp :results none
 ;; We have some special rows:
 ;; Row 2: header row - I need this.
@@ -123,7 +139,10 @@ parameter. We need to be able to get the table by its =name= property.
    (t t)
    )
   )
+#+end_src
 
+#+name: wh40k/org-table-lisp-from-name
+#+begin_src emacs-lisp :results none
 (defun wh40k/org-table-lisp-from-name (tblname)
   "Find an org-table named TBLNAME in the current buffer."
   (save-excursion
@@ -162,6 +181,7 @@ parameter. We need to be able to get the table by its =name= property.
 We should consider memoizing this function at some point.
 * the big function
 
+#+name: wh40k/damage-probability-all-weapons-to-defender
 #+begin_src emacs-lisp :results none
 (defun wh40k/damage-probability-all-weapons-to-defender (
                                  weapon-profile-table-name
@@ -284,6 +304,7 @@ are considered failures. The notation for this is "5+".
 
 We can represent these greater-than-or-equal-to rolls with a percentage.
 
+#+name: wh40k/d6-from-plus
 #+begin_src emacs-lisp :results none
 (defun wh40k/d6-from-plus (n)
   "Calculates the percentage probability of a d6 roll of N or greater."
@@ -312,6 +333,7 @@ things like saving throws as a failure on the number met. So in the event of a
 3+ armor save, a roll of a three or higher will cause the damage attempt to
 fail. We need an inverted percentage for this.
 
+#+name: wh40k/d6-from-plus-negate
 #+begin_src emacs-lisp :results none
 (defun wh40k/d6-from-plus-negate (n)
   "Calculates the percentage chances of rolling N or lower on a d6."
@@ -339,6 +361,7 @@ fail. We need an inverted percentage for this.
 ** re-rolls
 
 2*P(a) - P(a)^2
+#+name: wh40k/d6-with-reroll
 #+begin_src emacs-lisp :results none
 (defun wh40k/d6-with-reroll (n r)
   "Compute success chance roll of N+ on a d6, with a reroll of R or below."
@@ -410,6 +433,7 @@ toughness of the defender. The Warhammer 40,000 rules are fairly simple here:
   the toughness, use a 5+.
 + If the strength is less than or equal to half the toughness, use a 6+.
 
+#+name: wh40k/strength-vs-toughness
 #+begin_src emacs-lisp :results none
 (defun wh40k/strength-vs-toughness (strength toughness)
   "The d6 roll to wound with STRENGTH against TOUGHNESS."
@@ -455,6 +479,7 @@ a 5+ save instead. If an invulnerable save is present, always use the better
 save after applying the armor penetration. Remember: Invulnerable saves are
 unaffected by AP.
 
+#+name: wh40k/ap-vs-save
 #+begin_src emacs-lisp :results none
 ;; Apply armor penetration to the save. If the save is worse than the
 ;; invulnerable, use the invulnerable. Returns a percentage reduced by saves.
@@ -523,6 +548,7 @@ damage applied with only feel-no-pains as a possible reduction.
 Damage can be a value like =1= or =2= but it can also be =d3= or =d6=. Get us
 the variable number. Use =0= if no variable number is present.
 
+#+name: wh40k/damage-die
 #+begin_src emacs-lisp :results none
 (defun wh40k/damage-die (damage-notation)
   "The rolled segment of DAMAGE-NOTATION."
@@ -556,6 +582,7 @@ Such as =2d3= or =2d6=.
 
 *** Get both constant and variable damage
 
+#+name: wh40k/damage-parse
 #+begin_src emacs-lisp :results none
 (defun wh40k/damage-parse (damage)
   "Parse a DAMAGE notation into a tuple of random and constant values.
@@ -648,6 +675,7 @@ The total formula looks like this:
 
 (2 + ((d + 2) / 2 - 1)) / 6 = x
 
+#+name: wh40k/damage-resist-from-die
 #+begin_src emacs-lisp :results none
 ;; This only works with a resistance of 1. Need to refine formula for more when
 ;; the need arises.
@@ -670,6 +698,7 @@ The total formula looks like this:
 
 This gets us the total damage percentage/multiplier:
 
+#+name: wh40k/damage-multiplier
 #+begin_src emacs-lisp :results none
 (defun wh40k/damage-multiplier (damage-notation resist)
   (let* (
